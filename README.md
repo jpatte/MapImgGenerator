@@ -1,6 +1,6 @@
 # FeatureMap Image Generator
 
-This is a simple image generator for [FeatureMap](https://www.featuremap.co). 
+This is a simple image generator for [FeatureMap](https://www.featuremap.co). See the generator in action [here](https://jpatte.github.io/MapImgGenerator/).
 
 While FeatureMap has a built-in feature to export a map as an image, it doesn't provide any option to indicate the desired image resolution (yet). The exported image might be too small for printing, so this script relies on the JSON export of a map to generate an image at any resolution.
 
