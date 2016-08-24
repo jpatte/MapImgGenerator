@@ -1,0 +1,592 @@
+<html>
+<head>
+  <title>FeatureMap image generator</title>
+  <style>
+    body {
+      margin: 0px;
+      padding: 15px;
+      font-family: Verdana;
+      background: white;
+    }
+    
+    h1 {
+      margin:  0 0 15px 0;
+    }
+    
+    #inputs {
+      line-height: 30px;
+    }
+    
+    #inputs input[type="text"] {
+      width: 50px;
+      margin-right: 15px;
+    }
+    
+    #inputs #mapContent {
+      width: 1050px;
+      height: 275px;
+    }
+    
+    #status {
+      font-style: italic;
+      padding-bottom: 10px;
+    }
+    
+    #downloads {
+      display: none;
+      padding-bottom: 20px;
+      line-height: 30px;
+    }
+    
+    #downloads #resetBtn {
+      margin-top: 10px;
+    }
+    
+    #downloadLinks a {
+       margin-right: 10px;
+    }
+    
+    .notice {
+      font-size: 14px;  
+    }
+    
+    #imageZone img {
+      border: 1px solid gray;
+      display: inline-block;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>FeatureMap image generator</h1>
+  
+  <form id="inputs">
+    Image width (pixels): <input id="imageWidth" type="text" />
+    Image height (pixels): <input id="imageHeight" type="text" />
+    <br />
+    Map content (JSON, flat list):
+    <br />
+    <textarea id="mapContent" ></textarea>
+    <br />
+    <input type="submit" value="Draw image" />
+  </form>
+  
+  <div id="status">
+    <span id="statusText"></span>
+  </div>
+  
+  <div id="downloads">
+    <div id="downloadLinks">
+   </div>
+    Note: The image resolution is 96 dpi. You'll probably want to change the resolution to 300 dpi before printing.
+    <br />
+    <input id="resetBtn" type="button" value="Reset" />
+  </div>
+  
+  <div id="imageZone">
+  </div>
+
+  <a href="https://github.com/jpatte"><img style="position: absolute; top: 0; right: 0; border: 0;" src="https://camo.githubusercontent.com/365986a132ccd6a44c23a9169022c0b5c890c387/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f7265645f6161303030302e706e67" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_red_aa0000.png"></a>
+  
+  <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.8.3/underscore-min.js"></script>
+  <script src="https://code.jquery.com/jquery-3.1.0.slim.min.js" integrity="sha256-cRpWjoSOw5KcyIOaZNo4i6fZ9tKPhYYb6i5T9RSVJG8=" crossorigin="anonymous"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+    
+      $('#imageWidth').val('5000');
+      $('#imageHeight').val('3000');
+      $('#mapContent').val('{"uid":"YbC9Fi","name":"Demo map","ownerName":"julien","cleanName":"Demo-map","groupsLabel":"Groups","listsLabel":"Lists","layersLabel":"Layers","cards":[{"uid":"QzmLHm","id":"1","role":"GroupHeader","index":"0","title":"Group 1"},{"uid":"L9mPtZ","id":"2","role":"ListHeader","parentCardId":"1","index":"0","title":"List 1.1"},{"uid":"PSCFrc","id":"3","role":"ListHeader","parentCardId":"1","index":"1","title":"List 1.2","color":"yellow"},{"uid":"tleBmv","id":"4","role":"GroupHeader","index":"1","title":"Group 2"},{"uid":"OhTH1N","id":"5","role":"ListHeader","parentCardId":"4","index":"0","title":"List 2.1"},{"uid":"m7SFLJ","id":"6","role":"LayerHeader","index":"0","title":"Layer 1"},{"uid":"8qwHZL","id":"7","role":"ListItem","parentCardId":"2","otherParentCardId":"6","index":"0","title":"Card 1","color":"orange"},{"uid":"pMGPw5","id":"8","role":"ListItem","parentCardId":"3","otherParentCardId":"6","index":"0","title":"Card 2"},{"uid":"4QkrIa","id":"9","role":"LayerHeader","index":"1","title":"Layer 2","color":"pink"},{"uid":"ii0kDe","id":"10","role":"ListItem","parentCardId":"5","otherParentCardId":"6","index":"0","title":"Card 3"},{"uid":"ESiEH1","id":"11","role":"ListItem","parentCardId":"5","otherParentCardId":"6","index":"1","title":"Card 4","color":"green"},{"uid":"9Xaa8M","id":"12","role":"ListItem","parentCardId":"3","otherParentCardId":"9","index":"0","title":"Card 5","color":"purple"}]}');
+	  
+      var maxNbrPixelsForSingleImage = 8e7;
+      var cardWidthRatio = 140;
+      var cardHeightRatio = 105;
+      var lineWidthRatio = 1;
+      var mapTitleRatio = 25;
+      var cardTextLineHeightRatio = 1.2;
+      var cardTextRatio = 14;
+      var cardFooterTextRatio = 8;
+      var cardPaddingRatio = 4;
+      var marginRatio = 8;
+      var statePaddingRatio = 2;
+	  
+      var separatorColor = '#888';
+      var cardBorderColor = 'black';
+      var mapTitleColor = 'black';
+      var mapLabelsColor = '#166B9A';
+      var cardColors = {
+          virtual: { back: '#DDDDDD', text: '#000000' },
+          white: { back: '#FFFFFF', text: '#000000' },
+          darkBlue: { back: '#166B9A', text: '#FFFFFF' },
+          blue: { back: '#009ACD', text: '#FFFFFF' },
+          red: { back: '#FF565C', text: '#FFFFFF' },
+          yellow: { back: '#FFD370', text: '#000000' },
+          green: { back: '#A5D555', text: '#FFFFFF' },
+          pink: { back: '#FA97BA', text: '#000000' },
+          orange: { back: '#FF844F', text: '#000000' },
+          purple: { back: '#AA60AD', text: '#FFFFFF' }
+      };
+      var cardStates = {
+          todo: { text: 'To do', color: '#2971B7' },
+          ongoing: { text: 'Ongoing', color: '#A45944' },
+          done: { text: 'Done', color: '#45BF34' },
+          blocked: { text: 'Blocked', color: '#ED1C24' },
+          cancelled: { text: 'Cancelled', color: '#BABABA' }
+      };
+	  
+      var imageWidth;
+      var imageHeight;
+      var cardWidth;
+      var cardHeight;
+      var lineWidth;
+      var margin;
+      var cardPadding;
+      var textHeight;
+      var textLineHeight;
+      var textFont;
+      var titleFont;
+      var titleHeight;
+      var footerTextFont;
+      var footerTextHeight;
+      var statePadding;
+	  
+      function getCardColorName(cardData) {
+          if (cardData.isVirtual)
+              return 'virtual';
+          if (cardData.color)
+              return cardData.color;
+          if (cardData.role === 'GroupHeader')
+              return 'darkBlue';
+          if (cardData.role === 'ListHeader' || cardData.role === 'LayerHeader')
+              return 'blue';
+          return 'white';
+      }
+	  
+      function getCardLabel(cardData) {
+          if (cardData.isVirtual)
+              return '';
+          var label = cardData.title || cardData.description || '';
+          if (label.length > 110)
+              label = label.substring(0, 110) + '...';
+          return label;
+      }
+	  
+      function getMapStructure(mapData) {
+          var cardsByRole = {
+              GroupHeader: [],
+              ListHeader: [],
+              ListItem: [],
+              LayerHeader: [],
+              BenchItem: [],
+          };
+          $.each(mapData.cards, function (i, c) { return cardsByRole[c.role].push(c); });
+		  
+          var mapStructure = {
+              map: mapData,
+              groups: [],
+              lists: [],
+              layers: []
+          };
+		  
+		  // groups
+          _.each(_.sortBy(cardsByRole['GroupHeader'], function (gh) { return gh.index; }), function (gh) {
+              mapStructure.groups.push({
+                  id: gh.id,
+                  card: gh,
+                  index: parseInt(gh.index),
+                  width: 1,
+                  height: 1,
+                  lists: []
+              });
+          });
+		  
+		  // layers
+          _.each(_.sortBy(cardsByRole['LayerHeader'], function (lh) { return lh.index; }), function (lh) {
+              mapStructure.layers.push({
+                  id: lh.id,
+                  card: lh,
+                  index: parseInt(lh.index),
+                  width: 1,
+                  height: 1,
+                  sets: []
+              });
+          });
+		  
+		  //lists
+          _.each(_.sortBy(cardsByRole['ListHeader'], function (lh) { return lh.index; }), function (lh) {
+              var groupInfo = _.find(mapStructure.groups, function (g) { return g.id === lh.parentCardId; });
+              var info = {
+                  id: lh.id,
+                  card: lh,
+                  index: parseInt(lh.index),
+                  width: 1,
+                  height: 1,
+                  sets: []
+              };
+              groupInfo.lists.push(info);
+              mapStructure.lists.push(info);
+			  
+              _.each(mapStructure.layers, function (layer) {
+                  var set = [];
+                  info.sets.push(set);
+                  layer.sets.push(set);
+              });
+          });
+		  
+		  // items
+          _.each(_.sortBy(cardsByRole['ListItem'], function (li) { return li.index; }), function (li) {
+              var listInfo = _.find(mapStructure.lists, function (l) { return l.id === li.parentCardId; });
+              var layerInfo = _.find(mapStructure.layers, function (l) { return l.id === li.otherParentCardId; });
+              var info = {
+                  id: li.id,
+                  card: li,
+                  index: parseInt(li.index),
+                  width: 1,
+                  height: 1
+              };
+              listInfo.sets[layerInfo.index].push(info);
+          });
+		  
+		  // layer heights
+          _.each(mapStructure.layers, function (layer) {
+              layer.height = _.max(_.map(layer.sets, function (s) { return s.length; }));
+          });
+		  
+		  // group widths
+          _.each(mapStructure.groups, function (group) {
+              group.width = group.lists.length < 1 ? 1 : group.lists.length;
+          });
+		  
+          return mapStructure;
+      }
+	  
+      function computeCardDimensions(imageWidth, imageHeight, mapStructure) {
+          var baseWidth = marginRatio + cardWidthRatio + marginRatio + lineWidthRatio + marginRatio;
+          _.each(mapStructure.groups, function (group) {
+              baseWidth += (cardWidthRatio + marginRatio) * group.width + lineWidthRatio + marginRatio;
+          });
+		  
+          var baseHeight = (marginRatio + mapTitleRatio + marginRatio * 2) + cardHeightRatio + marginRatio + cardHeightRatio + marginRatio + lineWidthRatio + marginRatio;
+          _.each(mapStructure.layers, function (layer) {
+              baseHeight += (cardHeightRatio + marginRatio) * layer.height + lineWidthRatio + marginRatio;
+          });
+		  
+          var coeff = imageWidth / baseWidth;
+          if (baseHeight * coeff > imageHeight)
+              coeff = imageHeight / baseHeight;
+			  
+          cardWidth = Math.round(cardWidthRatio * coeff);
+          cardHeight = Math.round(cardHeightRatio * coeff);
+          lineWidth = Math.floor(lineWidthRatio * coeff);
+          margin = Math.round(marginRatio * coeff);
+          cardPadding = Math.round(cardPaddingRatio * coeff);
+          statePadding = Math.round(statePaddingRatio * coeff);
+          textHeight = Math.round(cardTextRatio * coeff);
+          textLineHeight = Math.round(cardTextRatio * cardTextLineHeightRatio * coeff);
+          textFont = textHeight + 'px Arial';
+          titleHeight = Math.round(mapTitleRatio * coeff);
+          titleFont = titleHeight + 'px Arial';
+          footerTextHeight = Math.round(cardFooterTextRatio * coeff);
+          footerTextFont = footerTextHeight + 'px Arial';
+      }
+	  
+      function drawMap(mapStructure) {
+          var $canvas = $('<canvas/>').prop({ width: imageWidth, height: imageHeight }).appendTo($('#imageZone')).hide();
+          var ctx = $canvas[0].getContext('2d');
+          var totalWidth = $canvas.width(), totalHeight = $canvas.height();
+		  
+		  // clear
+          ctx.fillStyle = "white";
+          ctx.fillRect(0, 0, totalWidth, totalHeight);
+		  
+		  // map title
+          ctx.textBaseline = 'top';
+          ctx.font = titleFont;
+          ctx.fillStyle = mapTitleColor;
+          ctx.fillText(mapStructure.map.name, margin, margin);
+		  
+          var verticalLineTop = margin + titleHeight + margin * 2;
+		  
+		  // labels
+          ctx.font = textFont;
+          ctx.fillStyle = mapLabelsColor;
+          ctx.textBaseline = 'top';
+          ctx.textAlign = 'right';
+          wrapText(ctx, mapStructure.map.groupsLabel, margin + cardWidth, verticalLineTop + cardPadding, cardWidth, textLineHeight);
+          wrapText(ctx, mapStructure.map.listsLabel, margin + cardWidth, verticalLineTop + cardPadding + cardHeight + margin, cardWidth, textLineHeight);
+          ctx.textBaseline = 'bottom';
+          ctx.textAlign = 'left';
+          wrapText(ctx, mapStructure.map.layersLabel, margin + cardPadding, verticalLineTop + cardHeight + margin + cardHeight, cardWidth, textLineHeight);
+		  
+		  // layers
+          var x = margin;
+          var y = verticalLineTop + cardHeight + margin + cardHeight + margin;
+          _.each(mapStructure.layers, function (layer) {
+              drawLine(ctx, 0, y, totalWidth, y, separatorColor);
+              y += lineWidth + margin;
+              drawCard(ctx, x, y, layer.card, layer.width, layer.height);
+              y += layer.height * (cardHeight + margin);
+          });
+          drawLine(ctx, 0, y, totalWidth, y, separatorColor);
+		  
+          x = margin + cardWidth + margin;
+          y = verticalLineTop;
+		  
+		  // groups
+          _.each(mapStructure.groups, function (group) {
+              drawLine(ctx, x, verticalLineTop, x, totalHeight, separatorColor);
+              x += lineWidth + margin;
+              drawCard(ctx, x, y, group.card, group.width, group.height);
+			  
+			  // lists
+              _.each(group.lists, function (list) {
+                  var baseY = y + cardHeight + margin;
+				  
+                  drawCard(ctx, x, baseY, list.card);
+                  baseY += cardHeight + margin * 2;
+				  
+                  var layerIndex = 0;
+                  _.each(list.sets, function (set) {
+                      var currentY = baseY;
+					  
+					  // items
+                      _.each(set, function (item) {
+                          drawCard(ctx, x, currentY, item.card);
+                          currentY += cardHeight + margin;
+                      });
+					  
+                      var layer = mapStructure.layers[layerIndex++];
+                      baseY += layer.height * (cardHeight + margin) + margin;
+                  });
+				  
+                  x += cardWidth + margin;
+              });
+          });
+          drawLine(ctx, x, verticalLineTop, x, totalHeight, separatorColor);
+		  
+          return $canvas;
+      }
+	  
+      function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+          var words = text.split(' ');
+          var line = '';
+		  
+          for (var n = 0; n < words.length; n++) {
+              var testLine = line + words[n] + ' ';
+              var testWidth = ctx.measureText(testLine).width;
+              if (testWidth > maxWidth && n > 0) {
+                  ctx.fillText(line, x, y);
+                  line = words[n] + ' ';
+                  y += lineHeight;
+              }
+              else {
+                  line = testLine;
+              }
+          }
+          ctx.fillText(line, x, y);
+      }
+	  
+      function parseDate(dateText) {
+          var parts = dateText.split(' ')[0].split('-');
+          return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+      }
+	  
+      function drawRoundRect(ctx, x, y, width, height, radius, fillColor) {
+          if (typeof radius === 'number') {
+              radius = { tl: radius, tr: radius, br: radius, bl: radius };
+          }
+          else {
+              var defaultRadius = { tl: 0, tr: 0, br: 0, bl: 0 };
+              for (var side in defaultRadius)
+                  radius[side] = radius[side] || defaultRadius[side];
+          }
+		  
+          ctx.beginPath();
+          ctx.moveTo(x + radius.tl, y);
+          ctx.lineTo(x + width - radius.tr, y);
+          ctx.quadraticCurveTo(x + width, y, x + width, y + radius.tr);
+          ctx.lineTo(x + width, y + height - radius.br);
+          ctx.quadraticCurveTo(x + width, y + height, x + width - radius.br, y + height);
+          ctx.lineTo(x + radius.bl, y + height);
+          ctx.quadraticCurveTo(x, y + height, x, y + height - radius.bl);
+          ctx.lineTo(x, y + radius.tl);
+          ctx.quadraticCurveTo(x, y, x + radius.tl, y);
+          ctx.closePath();
+          ctx.fillStyle = fillColor;
+          ctx.fill();
+      }
+	  
+      function drawLine(ctx, x1, y1, x2, y2, color) {
+          ctx.lineWidth = lineWidth;
+          ctx.strokeStyle = color;
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+      }
+	  
+      function drawCard(ctx, x, y, cardData, width, height) {
+	      // card (frame + background)
+          if (width === void 0) { width = 1; }
+          if (height === void 0) { height = 1; }
+          var cardColorName = getCardColorName(cardData);
+          var cardColor = cardColors[cardColorName];
+          var width = width * cardWidth + (width - 1) * margin;
+          var height = height * cardHeight + (height - 1) * margin;
+          ctx.fillStyle = cardColor.back;
+          ctx.fillRect(x, y, width, height);
+          ctx.strokeStyle = cardBorderColor;
+          ctx.strokeRect(x, y, width, height);
+		  
+		  // label
+          ctx.textBaseline = 'top';
+          ctx.textAlign = 'left';
+          ctx.font = textFont;
+          ctx.fillStyle = cardColor.text;
+          var cardLabel = getCardLabel(cardData);
+          wrapText(ctx, cardLabel, x + cardPadding, y + cardPadding, (width - cardPadding * 2), textLineHeight);
+		  
+		  // due date
+          if (cardData.dueDate) {
+              var dueDate = parseDate(cardData.dueDate);
+              ctx.textBaseline = 'bottom';
+              ctx.textAlign = 'left';
+              ctx.font = footerTextFont;
+              ctx.fillStyle = cardColor.text;
+              ctx.fillText(dueDate.toLocaleDateString(), x + cardPadding, y + height - cardPadding);
+          }
+		  
+		  // status
+          var statusWidth = 0;
+          if (cardData.status && cardData.status != 'aggregated') {
+              var statusTextX = x + width - cardPadding;
+              var statusTextY = y + height - cardPadding;
+              var cardState = cardStates[cardData.status];
+              ctx.textBaseline = 'bottom';
+              ctx.textAlign = 'right';
+              ctx.font = footerTextFont;
+              ctx.fillStyle = cardState.color;
+              var textWidth = ctx.measureText(cardState.text).width;
+              statusWidth = textWidth + statePadding + cardPadding;
+              drawRoundRect(ctx, statusTextX - textWidth - statePadding, statusTextY - footerTextHeight - statePadding, textWidth + statePadding * 2, footerTextHeight + statePadding * 2, statePadding, cardState.color);
+              ctx.fillStyle = 'white';
+              ctx.fillText(cardState.text, statusTextX, statusTextY);
+          }
+		  
+		  // estimate
+          if (cardData.estimation && cardData.estimation != 'aggregated') {
+              ctx.textBaseline = 'bottom';
+              ctx.textAlign = 'right';
+              ctx.font = footerTextFont;
+              ctx.fillStyle = cardColor.text;
+              ctx.fillText(cardData.estimation, x + width - cardPadding - statusWidth, y + height - cardPadding);
+          }
+      }
+	  
+      function setupDownloadLinks($canvas) {
+          var ctx = $canvas[0].getContext('2d');
+          var w = $canvas.width(), h = $canvas.height();
+		  
+          var $downloadLinks = $('#downloadLinks');
+          $downloadLinks.empty();
+		  
+          if (w * h >= maxNbrPixelsForSingleImage) {
+			  // split canvas into two parts
+              var $halfCanvas = $('<canvas/>').prop({ width: imageWidth / 2, height: imageHeight }).appendTo($('#imageZone')).hide();
+			  
+              var halfCanvas = $halfCanvas[0];
+              var leftData = ctx.getImageData(0, 0, w / 2, h);
+              halfCanvas.getContext('2d').putImageData(leftData, 0, 0);
+              var leftUrl = halfCanvas.toDataURL();
+              var rightData = ctx.getImageData(w / 2, 0, w / 2, h);
+              halfCanvas.getContext('2d').putImageData(rightData, 0, 0);
+              var rightUrl = halfCanvas.toDataURL();
+			  
+              $canvas.remove();
+              $halfCanvas.remove();
+			  
+              $('<a />')
+                  .attr('href', leftUrl)
+                  .attr('download', 'map-left.png')
+                  .text('Download left half')
+                  .appendTo($downloadLinks);
+              $('<a />')
+                  .attr('href', rightUrl)
+                  .attr('download', 'map-right.png')
+                  .text('Download right half')
+                  .appendTo($downloadLinks);
+				  
+              $('<span />', { class: 'notice' }).text('Unfortunately most browsers won\'t let you download this kind of large image in one file, so it must be split in two parts :(').appendTo($downloadLinks);
+			  
+              var $leftImage = $('<img />').attr({ src: leftUrl, title: 'map-left' }).appendTo($('#imageZone'));
+              var rightImage = $('<img />').attr({ src: rightUrl, title: 'map-right' }).appendTo($('#imageZone'));
+          }
+          else {
+              var imageUrl = $canvas[0].toDataURL();
+              $canvas.remove();
+			  
+              $('<a />')
+                  .attr('href', imageUrl)
+                  .attr('download', 'map.png')
+                  .text('Download image')
+                  .appendTo($downloadLinks);
+				  
+              var $image = $('<img />')
+                  .attr({ src: imageUrl, title: 'map' })
+                  .appendTo($('#imageZone'));
+          }
+      }
+	  
+      $('#inputs').submit(function () {
+          try {
+              imageWidth = parseInt($('#imageWidth').val());
+              imageHeight = parseInt($('#imageHeight').val());
+          }
+          catch (ex) {
+              alert('You must use integer values for the image size');
+              return false;
+          }
+		  
+          var mapStructure;
+          try {
+              var rawMapData = JSON.parse($('#mapContent').val());
+              mapStructure = getMapStructure(rawMapData);
+          }
+          catch (ex) {
+              alert('Invalid map content');
+              return false;
+          }
+		  
+          $('#inputs').hide();
+          $('#statusText').text('Rendering...');
+		  
+          setTimeout(function () {
+              computeCardDimensions(imageWidth, imageHeight, mapStructure);
+              var $canvas = drawMap(mapStructure);
+			  
+              $('#statusText').text('Getting image ready for download...');
+			  
+              setTimeout(function () {
+                  setupDownloadLinks($canvas);
+                  $('#downloads').show();
+				  
+                  $('#statusText').text('Done!');
+              }, 0);
+          }, 0);
+		  
+          return false;
+      });
+	  
+      $('#resetBtn').click(function () {
+          $('#statusText').text('');
+          $('#downloads').hide();
+          $('#inputs').show();
+          $('#imageZone').empty();
+      });
+    
+	});
+  </script>
+</body>
+</html>
